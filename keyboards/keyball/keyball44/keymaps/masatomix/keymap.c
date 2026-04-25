@@ -132,14 +132,3 @@ void keyboard_post_init_user(void) {
 #endif
     keyball_set_scrollsnap_mode(KEYBALL_SCROLLSNAP_MODE_FREE);
 }
-
-// BMP では pointing_device_init() / pointing_device_task() が自動で呼ばれないため、
-// matrix_scan_user() から手動で駆動する（研究メモ参照 / mint149 の Auto Mouse hack 同等）
-void matrix_scan_user(void) {
-    static bool pd_initialized = false;
-    if (!pd_initialized) {
-        pointing_device_init();
-        pd_initialized = true;
-    }
-    pointing_device_task();
-}
