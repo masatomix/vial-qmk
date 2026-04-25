@@ -28,8 +28,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // ---- Home Row Mods (GACS) 関連設定 ----
 #define TAPPING_TERM 250
-// TAPPING_TERM_PER_KEY / PERMISSIVE_HOLD_PER_KEY は vial-qmk が qmk_settings 経由で
-// 管理しているため keymap 側で再定義しない（#744 等の設定は Vial UI で後から調整）
 #define QUICK_TAP_TERM 120
 
 #define KEYBALL_CPI_DEFAULT 700       // マウス速度 (default: 700)
