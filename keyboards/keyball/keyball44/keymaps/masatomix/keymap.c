@@ -16,6 +16,7 @@ the Free Software Foundation, either version 2 of the License, or
 // - Combo/Tap Dance/per-key TAPPING_TERM は Vial UI で設定（vial-qmk は VIAL 必須のため）
 
 #include QMK_KEYBOARD_H
+#include "quantum/qmk_settings.h"
 
 // Layer number definitions
 #define L_BASE      0
@@ -131,4 +132,11 @@ void keyboard_post_init_user(void) {
     set_auto_mouse_enable(true);
 #endif
     keyball_set_scrollsnap_mode(KEYBALL_SCROLLSNAP_MODE_FREE);
+
+    // vial-qmk は build_vial.mk で HOLD_ON_OTHER_KEY_PRESS_PER_KEY を強制定義し、
+    // qmk_settings の get_hold_on_other_key_press は !(QS.tapping & 2) を返す。
+    // QS.tapping の default は 0 のため HOLD_ON_OTHER_KEY_PRESS=TRUE 状態 →
+    // Mod-Tap キーを押しながら別キーに触れた瞬間に Mod 確定する超アグレッシブ挙動。
+    // bit 1 (IGNORE_MOD_TAP_INTERRUPT) を立てて無効化する。
+    QS.tapping |= 2;
 }
