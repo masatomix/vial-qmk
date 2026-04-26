@@ -17,7 +17,7 @@
 #define DEFFERED_KEY_RECORD_LEN 6
 static keyrecord_t deferred_key_record[DEFFERED_KEY_RECORD_LEN];
 
-static void push_deferred_key_record(uint16_t keycode, keyevent_t *event) {
+__attribute__((unused)) static void push_deferred_key_record(uint16_t keycode, keyevent_t *event) {
     for (int i = 0; i < DEFFERED_KEY_RECORD_LEN; i++) {
         if (deferred_key_record[i].keycode == KC_NO) {
             keyrecord_t record     = {.event = *event, .keycode = keycode};
@@ -28,21 +28,11 @@ static void push_deferred_key_record(uint16_t keycode, keyevent_t *event) {
 }
 
 bool process_record_bmp(uint16_t keycode, keyrecord_t* record) {
-    // To apply key overrides to keycodes combined shift modifier, separate to two actions
-    if (keycode >= QK_MODS && keycode <= QK_MODS_MAX) {
-        if (record->event.pressed) {
-            register_mods(QK_MODS_GET_MODS(keycode));
-            uint16_t   deferred_keycode   = QK_MODS_GET_BASIC_KEYCODE(keycode);
-            keyevent_t deferred_key_event = (keyevent_t){.type = KEY_EVENT, .key = (keypos_t){.row = VIAL_MATRIX_MAGIC, .col = VIAL_MATRIX_MAGIC}, .pressed = 1, .time = (timer_read() | 1)};
-            push_deferred_key_record(deferred_keycode, &deferred_key_event);
-        } else {
-            uint16_t   deferred_keycode   = QK_MODS_GET_BASIC_KEYCODE(keycode);
-            keyevent_t deferred_key_event = ((keyevent_t){.type = KEY_EVENT, .key = (keypos_t){.row = VIAL_MATRIX_MAGIC, .col = VIAL_MATRIX_MAGIC}, .pressed = 0, .time = (timer_read() | 1)});
-            unregister_mods(QK_MODS_GET_MODS(keycode));
-            push_deferred_key_record(deferred_keycode, &deferred_key_event);
-        }
-        return false;
-    }
+    // 元実装は QK_MODS を mods + 素キーに分割して deferred key として再投入し
+    // key_override (us_key_on_jp_os_override 等) を適用する。本機 (K39 BMP) では
+    // BMP_US_KEY_JP_OS_OVERRIDE の override が S(KC_2) → KC_LBRC に翻訳して
+    // Mac ANSI 解釈で [ になる事象が起きるため、QK_MODS 分割そのものを bypass し
+    // 素の QMK 経路で処理させる (override も適用されない)。
 
     if (record->event.pressed) {
         switch (keycode) {
