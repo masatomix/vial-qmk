@@ -273,9 +273,11 @@ uint16_t qs_get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     return QS.tapping_term;
 }
 
+#ifndef VIAL_PERMISSIVE_HOLD_DISABLE
 bool get_permissive_hold(uint16_t keycode, keyrecord_t *record) {
     return QS.tapping & 1;
 }
+#endif
 
 bool get_hold_on_other_key_press(uint16_t keycode, keyrecord_t *record) {
     return !(QS.tapping & 2);

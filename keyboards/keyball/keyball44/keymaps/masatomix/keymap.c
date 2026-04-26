@@ -68,6 +68,32 @@ tap_dance_action_t tap_dance_actions[] = {
     [TD_QUO] = ACTION_TAP_DANCE_DOUBLE(KC_QUOT, S(KC_QUOT)),      // ' "
 };
 
+// #825 Phase B: per-key TAPPING_TERM (Pro Micro 版から移植)
+// #736 GUI 300ms / #780 Shift 170ms / 他 250ms (config.h TAPPING_TERM)
+uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
+    switch (keycode) {
+        case LGUI_T(KC_A):
+        case RGUI_T(KC_SCLN):
+            return 300;
+        case LSFT_T(KC_F):
+        case RSFT_T(KC_J):
+            return 170;
+        default:
+            return TAPPING_TERM;
+    }
+}
+
+// #825 Phase B: per-key PERMISSIVE_HOLD (#744 F/J Shift のみ true)
+bool get_permissive_hold(uint16_t keycode, keyrecord_t *record) {
+    switch (keycode) {
+        case LSFT_T(KC_F):
+        case RSFT_T(KC_J):
+            return true;
+        default:
+            return false;
+    }
+}
+
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   // Layer 0: Base QWERTY (Mac/Win 共通)
