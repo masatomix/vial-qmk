@@ -44,3 +44,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 副作用: Vial GUI の Combo / Tap Dance タブが効かなくなる (許容)。
 #define VIAL_COMBO_DISABLE
 #define VIAL_TAP_DANCE_DISABLE
+
+// #825 Phase B: per-key TAPPING_TERM / PERMISSIVE_HOLD を keymap.c で定義する。
+// vial.c / qmk_settings.c の non-weak override を抑止 (両ファイル patch 済)。
+// 副作用: Vial GUI の QMK Settings (tapping_term / permissive_hold) は無効化される (許容)。
+// TAPPING_TERM_PER_KEY / PERMISSIVE_HOLD_PER_KEY は build_vial.mk 等で既定義のため #ifndef ガード。
+#ifndef TAPPING_TERM_PER_KEY
+#define TAPPING_TERM_PER_KEY
+#endif
+#ifndef PERMISSIVE_HOLD_PER_KEY
+#define PERMISSIVE_HOLD_PER_KEY
+#endif
+#define VIAL_TAPPING_TERM_DISABLE
+#define VIAL_PERMISSIVE_HOLD_DISABLE
