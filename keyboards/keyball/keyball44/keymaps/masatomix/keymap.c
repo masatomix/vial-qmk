@@ -25,6 +25,49 @@ the Free Software Foundation, either version 2 of the License, or
 #define L_MOUSE     3
 #define L_SYM       4
 
+// #825: Combo (J+K → Esc, D+F → Tab) を Pro Micro 版から復活
+const uint16_t PROGMEM jk_combo[] = {RSFT_T(KC_J), RCTL_T(KC_K), COMBO_END};
+const uint16_t PROGMEM df_combo[] = {LCTL_T(KC_D), LSFT_T(KC_F), COMBO_END};
+combo_t key_combos[] = {
+    COMBO(jk_combo, KC_ESC),
+    COMBO(df_combo, KC_TAB),
+};
+
+// #825: Tap Dance を Pro Micro 版から復活
+enum {
+    TD_SS1 = 0,  // 1tap=Mac Cmd+Shift+4 / 2tap=Win Alt+PrtSc
+    TD_SS2,      // 1tap=Mac Cmd+Shift+5 / 2tap=Win PrtSc
+    TD_PRN,      // 1tap=( / 2tap=)
+    TD_CBR,      // 1tap={ / 2tap=}
+    TD_BRC,      // 1tap=[ / 2tap=]
+    TD_QUO,      // 1tap=' / 2tap="
+};
+
+void td_ss1_finished(tap_dance_state_t *state, void *user_data) {
+    if (state->count == 1) {
+        tap_code16(SGUI(KC_4));        // Mac: Cmd+Shift+4
+    } else if (state->count == 2) {
+        tap_code16(LALT(KC_PSCR));     // Win: Alt+PrintScreen
+    }
+}
+
+void td_ss2_finished(tap_dance_state_t *state, void *user_data) {
+    if (state->count == 1) {
+        tap_code16(SGUI(KC_5));        // Mac: Cmd+Shift+5
+    } else if (state->count == 2) {
+        tap_code16(KC_PSCR);           // Win: PrintScreen
+    }
+}
+
+tap_dance_action_t tap_dance_actions[] = {
+    [TD_SS1] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_ss1_finished, NULL),
+    [TD_SS2] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_ss2_finished, NULL),
+    [TD_PRN] = ACTION_TAP_DANCE_DOUBLE(S(KC_9), S(KC_0)),         // ( )
+    [TD_CBR] = ACTION_TAP_DANCE_DOUBLE(S(KC_LBRC), S(KC_RBRC)),   // { }
+    [TD_BRC] = ACTION_TAP_DANCE_DOUBLE(KC_LBRC, KC_RBRC),         // [ ]
+    [TD_QUO] = ACTION_TAP_DANCE_DOUBLE(KC_QUOT, S(KC_QUOT)),      // ' "
+};
+
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   // Layer 0: Base QWERTY (Mac/Win 共通)
@@ -45,7 +88,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
   // Layer 2: F-keys (BLE 管理キー含む)
   [L_FKEYS] = LAYOUT_universal(
-    _______, KC_F11 , KC_F12 , _______, _______, _______,                         _______ , _______ , _______ , _______ , _______ , _______,
+    _______, KC_F11 , KC_F12 , _______, _______, _______,                         _______ , TD(TD_SS1), TD(TD_SS2), _______ , _______ , _______,
     _______, KC_F1  , KC_F2  , KC_F3  , KC_F4  , KC_F5  ,                         KC_F6   , KC_F7   , KC_F8   , KC_F9   , KC_F10  , _______,
     _______, AD_WO_L, ADV_ID0, ADV_ID1, ADV_ID2, SEL_BLE,                         CPI_D100, CPI_I100, SCRL_DVD, SCRL_DVI, KBC_SAVE, _______,
               _______, _______, _______, _______, SEL_USB,                         _______ , _______ , _______ , _______ , KBC_RST
@@ -63,7 +106,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [L_SYM] = LAYOUT_universal(
     _______, S(KC_1)     , S(KC_2)     , S(KC_3)     , S(KC_4)     , S(KC_5),                         S(KC_6), S(KC_7)     , S(KC_8)     , S(KC_9)     , S(KC_0)     , _______,
     _______, LGUI_T(KC_1), LALT_T(KC_2), LCTL_T(KC_3), LSFT_T(KC_4), KC_5   ,                         KC_6   , RSFT_T(KC_7), RCTL_T(KC_8), RALT_T(KC_9), RGUI_T(KC_0), _______,
-    _______, KC_BSLS     , KC_QUOT     , S(KC_9)     , S(KC_LBRC)  , KC_LBRC,                         KC_EQL , KC_MINS     , _______     , _______     , _______     , _______,
+    _______, KC_BSLS     , TD(TD_QUO)  , TD(TD_PRN)  , TD(TD_CBR)  , TD(TD_BRC),                      KC_EQL , KC_MINS     , _______     , _______     , _______     , _______,
               _______    , _______     , _______     , _______     , _______,                         _______, _______    , _______     , _______     , _______
   ),
 };
@@ -139,4 +182,45 @@ void keyboard_post_init_user(void) {
     // Mod-Tap キーを押しながら別キーに触れた瞬間に Mod 確定する超アグレッシブ挙動。
     // bit 1 (IGNORE_MOD_TAP_INTERRUPT) を立てて無効化する。
     QS.tapping |= 2;
+}
+
+// #828: BMP 版はデフォルトで QMK 純正と逆方向のスクロールになるため、
+// keyball_on_apply_motion_to_mouse_scroll を override して符号反転する。
+// keyball.c:190 の weak 実装に対する強い override。
+// keyball.c の static helper (divmod16/clip2int8) は外部から見えないので複製。
+static int16_t k_divmod16(int16_t *v, int16_t div) {
+    int16_t r = *v / div;
+    *v -= r * div;
+    return r;
+}
+static inline int8_t k_clip2int8(int16_t v) {
+    return (v) < -127 ? -127 : (v) > 127 ? 127 : (int8_t)v;
+}
+
+void keyball_on_apply_motion_to_mouse_scroll(keyball_motion_t *m, report_mouse_t *r, bool is_left) {
+    int16_t div = 1 << (keyball_get_scroll_div() - 1);
+    int16_t x = k_divmod16(&m->x, div);
+    int16_t y = k_divmod16(&m->y, div);
+
+    // 純正と同じ向きへ反転 (元実装は r->h = -clip2int8(y), r->v = clip2int8(x))
+    r->h = k_clip2int8(y);
+    r->v = -k_clip2int8(x);
+    if (is_left) {
+        r->h = -r->h;
+        r->v = -r->v;
+    }
+
+    // Scroll snapping (KEYBALL_SCROLLSNAP_ENABLE == 2 経路、上流と同等)
+#if KEYBALL_SCROLLSNAP_ENABLE == 2
+    switch (keyball_get_scrollsnap_mode()) {
+        case KEYBALL_SCROLLSNAP_MODE_VERTICAL:
+            r->h = 0;
+            break;
+        case KEYBALL_SCROLLSNAP_MODE_HORIZONTAL:
+            r->v = 0;
+            break;
+        default:
+            break;
+    }
+#endif
 }
