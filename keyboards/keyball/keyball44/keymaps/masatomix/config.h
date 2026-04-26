@@ -38,3 +38,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define AUTO_MOUSE_TIME 400
 
 #define KEYBALL_SCROLLSNAP_ENABLE 2
+
+// #825: Combo / Tap Dance を keymap.c 側で hardcoded 定義するため、
+// vial.h の vial-managed Combo/TD を無効化する (vial.h を patch 済)。
+// 副作用: Vial GUI の Combo / Tap Dance タブが効かなくなる (許容)。
+#define VIAL_COMBO_DISABLE
+#define VIAL_TAP_DANCE_DISABLE
