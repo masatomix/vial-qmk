@@ -73,7 +73,7 @@ void vial_keycode_tap(uint16_t keycode);
 #define VIAL_MATRIX_MAGIC 240
 
 
-#ifdef TAP_DANCE_ENABLE
+#if defined(TAP_DANCE_ENABLE) && !defined(VIAL_TAP_DANCE_DISABLE)
 #define VIAL_TAP_DANCE_ENABLE
 
 #ifndef VIAL_TAP_DANCE_ENTRIES
@@ -103,7 +103,7 @@ _Static_assert(sizeof(vial_tap_dance_entry_t) == 10, "Unexpected size of the via
 #endif
 
 
-#ifdef COMBO_ENABLE
+#if defined(COMBO_ENABLE) && !defined(VIAL_COMBO_DISABLE)
 #define VIAL_COMBO_ENABLE
 
 #ifndef VIAL_COMBO_ENTRIES
