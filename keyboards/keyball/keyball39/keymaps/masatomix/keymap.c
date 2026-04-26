@@ -20,10 +20,6 @@ the Free Software Foundation, either version 2 of the License, or
 
 #include QMK_KEYBOARD_H
 #include "quantum/qmk_settings.h"
-#include "bmp_settings.h"
-#include "print.h"
-#include "dynamic_keymap.h"
-#include "eeprom_bmp.h"
 
 // Layer number definitions
 #define L_BASE      0
@@ -55,11 +51,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 
   // Layer 2: F-keys (BLE 管理キー含む、K44 BMP と同位置)
-  // L02 (E 位置) に DISABLE_KEY_OS_OVERRIDE を仮配置: BMP デフォルト EEPROM の
-  // BMP_US_KEY_JP_OS_OVERRIDE が S(KC_2) を JP_AT(KC_LBRC) に翻訳して macOS ANSI 解釈で
-  // [ が出る現象の解除用。L_FKEYS に入って 1 回押せば EEPROM=DISABLE で永続化される。
   [L_FKEYS] = LAYOUT_universal(
-    KC_F11   , KC_F12   , DISABLE_KEY_OS_OVERRIDE, _______, _______,                   _______  , _______  , _______  , _______  , _______          ,
+    KC_F11   , KC_F12   , _______  , _______  , _______  ,                             _______  , _______  , _______  , _______  , _______          ,
     KC_F1    , KC_F2    , KC_F3    , KC_F4    , KC_F5    ,                             KC_F6    , KC_F7    , KC_F8    , KC_F9    , KC_F10  ,
     AD_WO_L  , ADV_ID0  , ADV_ID1  , ADV_ID2  , SEL_BLE  ,                             CPI_D100 , CPI_I100 , SCRL_DVD , SCRL_DVI , KBC_SAVE,
     _______  , _______  , _______  , _______  , _______  , SEL_USB,                            _______  , _______  , _______  , _______  , _______, KBC_RST
@@ -125,29 +118,4 @@ void keyboard_post_init_user(void) {
     // Mod-Tap キーを押しながら別キーに触れた瞬間に Mod 確定する超アグレッシブ挙動。
     // bit 1 (IGNORE_MOD_TAP_INTERRUPT) を立てて無効化する。
     QS.tapping |= 2;
-
-    // 注: ここで bmp_set_key_os_override を呼んでも、続く protocol_post_init →
-    // bmp_settings_init で EEPROM 値が再読込され override が再登録される。
-    // 代わりに housekeeping_task_user で 1 回だけ disable する (下記)。
-}
-
-// Keyball の housekeeping_task_kb (keyball.c:589) は _user を呼んでくれないので
-// matrix_scan_user で代用 (こちらは keyball.c:795 で呼ばれる)。
-void matrix_scan_user(void) {
-    static bool initialized = false;
-    if (!initialized) {
-        println("[k39-fix] matrix_scan_user: erase default + reset dynamic_keymap");
-        // BMP の dynamic_keymap_reset は最初に eeprom_bmp_load_default を試して
-        // 成功したら C ソースからの再書込をスキップする。default snapshot が
-        // EEPROM に保存されてるとそれが永続的に再ロードされ続けるので、先に
-        // erase_default で snapshot を消去してから reset を呼ぶ。
-        eeprom_bmp_erase_default();
-        dynamic_keymap_reset();
-        // process_record_bmp.c の QK_MODS 分割を bypass する patch を当ててあるので
-        // S(KC_2) は素の QMK 経路を通り override 適用されない。
-        // bmp_set_key_os_override も念のため EEPROM=DISABLE で書込（次回 boot 用）。
-        bmp_set_key_os_override(BMP_KEY_OS_OVERRIDE_DISABLE);
-        println("[k39-fix] done");
-        initialized = true;
-    }
 }
