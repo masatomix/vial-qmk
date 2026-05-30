@@ -20,6 +20,25 @@ the Free Software Foundation, either version 2 of the License, or
 
 #include QMK_KEYBOARD_H
 #include "quantum/qmk_settings.h"
+#include "bmp_settings.h"
+#include "translate_ansi_to_jis.h"
+
+// #1025: JIS/US 手動トグル。
+// BMP は os_detection 不可のため手動切替。BMP ネイティブの US-on-JIS override
+// (bmp_set_key_os_override / EEPROM 永続) をトグルする。直キーの記号は
+// process_record_bmp が S(KC_n) を分解 → この override が翻訳する。
+// process_record を通らない TapDance / LT のタップだけ a2j_translate で別途変換。
+enum my_keycodes {
+    JIS_TOG = KEYBALL_SAFE_RANGE,  // toggle: BMP_US_KEY_JP_OS_OVERRIDE <-> DISABLE
+};
+
+static inline bool jis_active(void) {
+    return bmp_get_key_os_override() == BMP_US_KEY_JP_OS_OVERRIDE;
+}
+// TapDance / LT タップから共有する US->JIS 変換（override が ON のときだけ）(#1025)
+static uint16_t td_kc(uint16_t kc) {
+    return jis_active() ? a2j_translate(kc) : kc;
+}
 
 // Layer number definitions
 #define L_BASE      0
@@ -64,15 +83,38 @@ void td_ss2_finished(tap_dance_state_t *state, void *user_data) {
     }
 }
 
+// OS 連動の「1タップ=kc1 / 2タップ=kc2」Tap Dance (#1025)。
+// QMK の tap_dance_pair_* と同じ挙動で、出力時に td_kc() で JIS 変換を挟む。
+// TapDance コールバックは register_code16 で process_record_bmp を通らないため、
+// BMP ネイティブ override では翻訳されない。ここで a2j_translate して埋める。
+void td_pair_a2j_each(tap_dance_state_t *state, void *user_data) {
+    tap_dance_pair_t *pair = (tap_dance_pair_t *)user_data;
+    if (state->count == 2) {
+        register_code16(td_kc(pair->kc2));
+        state->finished = true;
+    }
+}
+void td_pair_a2j_finished(tap_dance_state_t *state, void *user_data) {
+    tap_dance_pair_t *pair = (tap_dance_pair_t *)user_data;
+    register_code16(td_kc(state->count == 1 ? pair->kc1 : pair->kc2));
+}
+void td_pair_a2j_reset(tap_dance_state_t *state, void *user_data) {
+    tap_dance_pair_t *pair = (tap_dance_pair_t *)user_data;
+    unregister_code16(td_kc(state->count == 1 ? pair->kc1 : pair->kc2));
+}
+#define ACTION_TD_PAIR_A2J(kc1, kc2) \
+    { .fn = {td_pair_a2j_each, td_pair_a2j_finished, td_pair_a2j_reset, NULL}, .user_data = (void *)&((tap_dance_pair_t){kc1, kc2}) }
+
 tap_dance_action_t tap_dance_actions[] = {
+    // スクショ TD は機能キー(記号でない)のため td_kc 不要
     [TD_SS1] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_ss1_finished, NULL),
     [TD_SS2] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_ss2_finished, NULL),
-    [TD_PRN] = ACTION_TAP_DANCE_DOUBLE(S(KC_9), S(KC_0)),
-    [TD_CBR] = ACTION_TAP_DANCE_DOUBLE(S(KC_LBRC), S(KC_RBRC)),
-    [TD_BRC] = ACTION_TAP_DANCE_DOUBLE(KC_LBRC, KC_RBRC),
-    [TD_QUO] = ACTION_TAP_DANCE_DOUBLE(KC_QUOT, S(KC_QUOT)),
-    [TD_EXLM] = ACTION_TAP_DANCE_DOUBLE(S(KC_1), S(KC_GRV)),
-    [TD_AT]   = ACTION_TAP_DANCE_DOUBLE(S(KC_2), KC_GRV),
+    [TD_PRN] = ACTION_TD_PAIR_A2J(S(KC_9), S(KC_0)),      // ( )
+    [TD_CBR] = ACTION_TD_PAIR_A2J(S(KC_LBRC), S(KC_RBRC)),// { }
+    [TD_BRC] = ACTION_TD_PAIR_A2J(KC_LBRC, KC_RBRC),      // [ ]
+    [TD_QUO] = ACTION_TD_PAIR_A2J(KC_QUOT, S(KC_QUOT)),   // ' "
+    [TD_EXLM] = ACTION_TD_PAIR_A2J(S(KC_1), S(KC_GRV)),   // ! ~
+    [TD_AT]   = ACTION_TD_PAIR_A2J(S(KC_2), KC_GRV),      // @ `
 };
 
 // #825 Phase B: per-key TAPPING_TERM (Pro Micro 版から移植)
@@ -126,7 +168,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
   // Layer 2: F-keys (BLE 管理キー含む、K44 BMP と同位置)
   [L_FKEYS] = LAYOUT_universal(
-    KC_F11   , KC_F12   , _______  , _______  , _______  ,                             _______  , TD(TD_SS1), TD(TD_SS2), _______  , _______          ,
+    KC_F11   , KC_F12   , JIS_TOG  , _______  , _______  ,                             _______  , TD(TD_SS1), TD(TD_SS2), _______  , _______          ,
     KC_F1    , KC_F2    , KC_F3    , KC_F4    , KC_F5    ,                             KC_F6    , KC_F7    , KC_F8    , KC_F9    , KC_F10  ,
     AD_WO_L  , ADV_ID0  , ADV_ID1  , ADV_ID2  , SEL_BLE  ,                             CPI_D100 , CPI_I100 , SCRL_DVD , SCRL_DVI , KBC_SAVE,
     _______  , _______  , _______  , _______  , _______  , SEL_USB,                            _______  , _______  , _______  , _______  , _______, KBC_RST
@@ -169,6 +211,41 @@ layer_state_t layer_state_set_user(layer_state_t state) {
     return state;
 }
 
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // JIS/US トグル: BMP ネイティブ override を反転 + EEPROM 永続 (#1025)。
+    // bmp_set_key_os_override() が override 適用と EEPROM 書込を両方行う。
+    if (keycode == JIS_TOG) {
+        if (record->event.pressed) {
+            bmp_set_key_os_override(jis_active()
+                ? BMP_KEY_OS_OVERRIDE_DISABLE
+                : BMP_US_KEY_JP_OS_OVERRIDE);
+        }
+        return false;
+    }
+
+    // JIS 時、Mod-Tap / Layer-Tap の「タップ」が divergent な記号になる場合を変換 (#1025)。
+    // 直キー S(KC_n) は process_record_bmp が分解 → BMP override が翻訳するためここには来ない。
+    // base の ` (LT) や Shift+; → : 等はここで a2j 変換（タップ確定時のみ、ホールドは素通し）。
+    if (jis_active() && record->event.pressed && record->tap.count &&
+        (IS_QK_MOD_TAP(keycode) || IS_QK_LAYER_TAP(keycode))) {
+        uint8_t  basic = QK_MODS_GET_BASIC_KEYCODE(keycode);
+        uint8_t  mods  = get_mods();
+        uint16_t eff   = (mods & MOD_MASK_SHIFT) ? S(basic) : (uint16_t)basic;
+        uint16_t jis   = a2j_translate(eff);
+        if (jis != eff) {  // divergent な記号のときだけ差し替え
+            if (mods & MOD_MASK_SHIFT) {
+                del_mods(MOD_MASK_SHIFT);
+                tap_code16(jis);
+                set_mods(mods);
+            } else {
+                tap_code16(jis);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
 #ifdef OLED_ENABLE
 
 #    include "lib/oledkit/oledkit.h"
@@ -177,6 +254,8 @@ void oledkit_render_info_user(void) {
     keyball_oled_render_keyinfo();
     keyball_oled_render_ballinfo();
     keyball_oled_render_layerinfo();
+    // #1025: 現在の JIS/US トグル状態を表示
+    oled_write_P(jis_active() ? PSTR("JIS\n") : PSTR("US\n"), false);
 }
 #endif
 

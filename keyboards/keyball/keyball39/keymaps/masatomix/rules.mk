@@ -17,3 +17,6 @@ TAP_DANCE_ENABLE = yes
 # セキュアな環境 (社用 PC 等) で USB Storage ブロック policy に引っかかるのを回避。
 # DFU mode (bootloader 経由) では別系統で MSC が出るので flash 書込は可能。
 OPT_DEFS += -DDISABLE_MSC=1
+
+# #1025: TapDance/LT のタップを JIS へ変換するための US->JIS テーブル
+SRC += translate_ansi_to_jis.c
