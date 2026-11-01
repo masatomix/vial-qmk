@@ -20,3 +20,6 @@ OPT_DEFS += -DDISABLE_MSC=1
 
 # #1025: TapDance/LT のタップを JIS へ変換するための US->JIS テーブル
 SRC += translate_ansi_to_jis.c
+
+# #1194: Achordion (同手ロールの HRM 誤爆対策、getreuer/qmk-keymap eed64fb 由来)
+SRC += achordion.c
