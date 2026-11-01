@@ -22,6 +22,7 @@ the Free Software Foundation, either version 2 of the License, or
 #include "quantum/qmk_settings.h"
 #include "bmp_settings.h"
 #include "translate_ansi_to_jis.h"
+#include "achordion.h"  // #1194: 同手ロールの HRM 誤爆対策 (Chordal Hold 相当)
 
 // #1025: JIS/US 手動トグル。
 // BMP は os_detection 不可のため手動切替。BMP ネイティブの US-on-JIS override
@@ -144,6 +145,47 @@ bool get_permissive_hold(uint16_t keycode, keyrecord_t *record) {
     }
 }
 
+// ---- #1194: Achordion (同手ロールの HRM 誤爆対策) ----
+// QMK が tap-hold を「hold」と確定した直後に Achordion が横取りし、次に押されたキーが
+// 同じ手なら tap に差し替える。permissive hold / per-key TAPPING_TERM はそのまま残るため、
+// 反対手コンビ (F=Shift + 右手キー等) の即時判定 (#780) は従来どおり。
+//
+// 対象は home row の Mod-Tap のみ。Layer-Tap と親指行の Mod-Tap は Achordion を素通し
+// (achordion_timeout = 0) にして従来挙動を維持する:
+//   - LT は同手でレイヤー先のキーを押す使い方が普通 (LT(L_MOUSE,G)+左手 BTN4/5 等)
+//   - LT(L_SYM,`) 長押し + ボールでスクロール等、キーを押さずに hold だけ使う操作がある
+//   - 親指の LALT_T(TAB) / LGUI_T(LNG1) も同手チョードがあり得る
+
+// LAYOUT_no_ball の行割当: row 0-3 = 左手 / row 4-7 = 右手 (親指行は row 3 / 7)。
+// BMP では platforms/bmp/config.h が MATRIX_ROWS=MATRIX_COLS=32 を定義しており、
+// achordion.c 既定の on_left_hand() (MATRIX_ROWS/2 で判定) が使えないため自前で判定する。
+static bool k39_on_left_hand(keypos_t pos) {
+    return pos.row < 4;
+}
+
+uint16_t achordion_timeout(uint16_t tap_hold_keycode) {
+    if (IS_QK_LAYER_TAP(tap_hold_keycode)) {
+        return 0;  // Layer-Tap は Achordion 対象外
+    }
+    switch (tap_hold_keycode) {
+        case LALT_T(KC_TAB):   // 親指 L31
+        case LGUI_T(KC_LNG1):  // 親指 L32
+            return 0;          // 親指行の Mod-Tap も対象外
+        default:
+            return 1000;       // Achordion 既定値。この時間までに他キーが無ければ hold 確定
+    }
+}
+
+bool achordion_chord(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
+                     uint16_t other_keycode, keyrecord_t *other_record) {
+    // 反対手なら hold、同手なら tap (Chordal Hold と同じ "opposite hands" ルール)
+    return k39_on_left_hand(tap_hold_record->event.key) != k39_on_left_hand(other_record->event.key);
+}
+
+void matrix_scan_user(void) {
+    achordion_task();  // #1194: Achordion の timeout 処理 (keyball.c の matrix_scan_kb から呼ばれる)
+}
+
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   // Keyball39 LAYOUT_universal:
@@ -212,6 +254,11 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // #1194: Achordion を最初に通す (tap-hold の hold 確定を横取りして同手なら tap に差し替える)
+    if (!process_achordion(keycode, record)) {
+        return false;
+    }
+
     // JIS/US トグル: BMP ネイティブ override を反転 + EEPROM 永続 (#1025)。
     // bmp_set_key_os_override() が override 適用と EEPROM 書込を両方行う。
     if (keycode == JIS_TOG) {
